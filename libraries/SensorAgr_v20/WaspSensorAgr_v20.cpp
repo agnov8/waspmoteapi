@@ -546,47 +546,61 @@ float WaspSensorAgr_v20::readAnemometer(void)
 	int value_anemometer = 0;
 	float wind_speed = 0;
 	unsigned long start_anemometer=0;
-	unsigned long previous_pulse=0;
-	unsigned long pulse_duration=1000000; // set to large value
+	unsigned long start_previous_pulse=0;
+	unsigned long start_pulse=0;
+	bool first_edge_recorded=false;
+	unsigned long shortest_pulse_duration=1000000; // set to initial large value
 	unsigned long new_pulse_duration=0;
 	const unsigned long MEAS_TIME = 3000; // ms
 
-	value_anemometer = 0;
+	value_anemometer = -1;	// Allows us to ignore first pulse with incomplete duty cycle
 	start_anemometer = millis();
-	previous_pulse = millis();
+	start_previous_pulse = start_anemometer; // To ensure we have the same start valuea
 	while( (millis()-start_anemometer) <= MEAS_TIME )
 	{
 		previous_reading_anemometer = reading_anemometer;
 		reading_anemometer = digitalRead(DIGITAL2);
-    
 		// check falling edge
 		if((previous_reading_anemometer == 1)&&(reading_anemometer == 0))
 		{
+	    		start_pulse = millis(); // Read pulse edge timing asap.
+ 
 			// increment pulse counter
 			value_anemometer++;
 			
-			// get new pulse elapsed time
-			new_pulse_duration = millis()-previous_pulse;
-			// update pulse instant time				
-			previous_pulse = millis();
-
-			// update pulse duration in the case is the lowest 
-			if( new_pulse_duration < pulse_duration )
-			{
-				pulse_duration = new_pulse_duration;
+			// get new pulse elapsed time, for all pulses except the first one.
+			if( first_edge_recorded ) {
+				new_pulse_duration = start_pulse - start_previous_pulse;
+				// update pulse duration in the case is the lowest 
+				if( new_pulse_duration < shortest_pulse_duration )
+				{
+					shortest_pulse_duration = new_pulse_duration;
+				}
 			}
-			
+			else {
+				first_edge_recorded = true;
+			}
+
+			// update pulse instant time				
+			start_previous_pulse = start_pulse;
 		}
 		//avoid millis overflow problem
 		if( millis() < start_anemometer ) start_anemometer=millis(); 
 	}
 	delay(100);
 	
-	// calculate average wind speed
-	wind_speed = value_anemometer * 2.4 / (MEAS_TIME/1000);
-	
-	// calculate gust of wind 2.4Km/h per second
-	gustWind = 2.4 / ((float)pulse_duration/1000);
+	// Only calc if we can
+	if(value_anemometer > 0) {
+		// calculate average wind speed using the timing between the 
+		// first and last pulse recorded as these would represent full duty cycles. 
+		wind_speed = value_anemometer * 2.4 / (MEAS_TIME/1000);
+		// calculate gust of wind 2.4Km/h per second
+		gustWind = 2.4 / ((float)shortest_pulse_duration/1000);
+	} 
+	else {
+	    	wind_speed = 0;
+		gustWind = 0;
+	}		
   
 	return wind_speed;
 }
