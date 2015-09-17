@@ -330,7 +330,7 @@ void onHAIwakeUP(void)
 	if( intConf & PLV_INT )
 	{
 		// check monitorization pin
-		if( !(digitalRead(PLV_INT_PIN_MON)))
+		if( digitalRead(PLV_INT_PIN_MON) )
 		{
 			intCounter++;
 			intFlag |= PLV_INT;
