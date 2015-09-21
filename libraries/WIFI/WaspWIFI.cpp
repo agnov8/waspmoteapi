@@ -1246,7 +1246,7 @@ uint8_t WaspWIFI::setAutojoinAuth(uint8_t val)
 	// Copy "set w a "
 	strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[8]))); 
 	snprintf(question, sizeof(question), "%s%d\r",buffer,val);
-	return sendCommand(question, "AOK", 5000);
+	return sendCommand(question, (char *)"AOK", 5000);
 }
 
 //! Sets the policy for automatically joining/associating with network 
@@ -1255,15 +1255,13 @@ uint8_t WaspWIFI::setJoinMode(uint8_t val)
 {
 	char question[50];
 	char buffer[20];
-	int retries=0;
-	const int MAX_RETRIES=3;
 	
 	// Copy "set w j "
 	strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[9]))); 
 	snprintf(question, sizeof(question), "%s%d\r", buffer, val);
 	 
 	// Send command to join wlan 
-	if( sendCommand(question, "AOK", 5000)==1 )
+	if( sendCommand(question, (char *)"AOK", 5000)==1 )
 	{		
 		return 1; 		
 	}
@@ -1307,7 +1305,7 @@ uint8_t WaspWIFI::setAuthKey(uint8_t secMode, char* pass)
 		snprintf(question, sizeof(question), "%s%s\r", buffer, pass); 
 	}
 	// Sends the command over the UART.
-	return sendCommand(question, "AOK", 5000);
+	return sendCommand(question, (char *)"AOK", 5000);
 }
 
 //! Sets the link monitor timeout threshold.
@@ -1452,7 +1450,7 @@ uint8_t WaspWIFI::join(char* ssid)
 		while( retries>0 )
 		{	
 			// "join ??" command
-			if( sendCommand( question, "Associated!", Disconn_pattern, 10000, true) == 1)
+			if( sendCommand( question, (char *)"Associated!", Disconn_pattern, 10000, true) == 1)
 			{
 				// Copy "get ip\r"
 				strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[72])));
@@ -1741,7 +1739,7 @@ uint8_t WaspWIFI::setDHCPoptions(uint8_t val)
 	// Copy "set i d "
 	strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[36])));
 	snprintf(question, sizeof(question), "%s%d\r", buffer, val);
-	return sendCommand(question, "AOK", 5000);  
+	return sendCommand(question, (char *)"AOK", 5000);  
 }
 
 //! Sets the IP options.
@@ -1766,7 +1764,7 @@ uint8_t WaspWIFI::setConnectionOptions(uint8_t val)
 	// Copy "set i p "
 	strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[38])));
 	snprintf(question, sizeof(question), "%s%d\r", buffer, val);
-	return sendCommand(question, "AOK", 5000);  
+	return sendCommand(question, (char *)"AOK", 5000);  
 }
 	
 //! Sets the TCP connection password. Provides minimal authentication by 
@@ -1888,12 +1886,11 @@ uint8_t WaspWIFI::getFile(	char* filename,
 {
 	char question[128];
 	char buffer[20];
-	uint16_t plong=0;
 	int maxBuffer=256;
 	int i=0;
 	int readRet=0;
 	unsigned long previous;
-	bool stop, end, timeout;
+	bool end, timeout;
 	unsigned long total=0;
 		
 	// get statistics
@@ -3119,7 +3116,8 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 	
 	// Send header automatically when connection is open	
 	// Copy "set o f 1\r"
-	strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[57])));
+	//strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[57])));
+        snprintf(question, sizeof(question),"set o f 0\r");
 	u5 = sendCommand(question);
 	
 	// Use UART data trigger mode, which causes the module to make a TCP/HTTP 
@@ -3922,9 +3920,7 @@ bool WaspWIFI::isConnected(unsigned long timeout)
 {
 	char question[20];
 	char buffer[20];
-	uint16_t i=0;
 	bool result = false;
-	unsigned long aux_previous;	
 	
 	#ifdef DEBUG_WIFI
 	USB.println(F("get ip\r"));  
@@ -5429,11 +5425,11 @@ uint8_t WaspWIFI::setRTCfromWiFi()
 		answer[i]='\0'; 
 		retries--;
 		// Check if module did set the time
-		if ( findPattern((uint8_t*)answer, "NOT SET",i) == -1 )
+		if ( findPattern((uint8_t*)answer, (char *)"NOT SET",i) == -1 )
 		{
 			retries = 0;
 		}
-		else if ((findPattern((uint8_t*)answer, "NOT SET",i)!=-1) && retries == 0)
+		else if ((findPattern((uint8_t*)answer, (char *)"NOT SET",i)!=-1) && retries == 0)
 		{
 			return 1;
 		}

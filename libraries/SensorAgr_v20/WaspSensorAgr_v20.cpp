@@ -962,6 +962,7 @@ float WaspSensorAgr_v20::readPluviometerCurrent()
 	return 	readPluviometer(1, 0);
 }
 
+
 /*	readPluviometerDay 
  * 
  * It calculates the rain fall during the last day
@@ -973,6 +974,23 @@ float WaspSensorAgr_v20::readPluviometerDay()
 	return 	readPluviometer(24, 1);
 }
 
+
+/*	readPluviometerSince 
+ * 
+ * It calculates the rain fall since a start time (using the whole hour) given, 
+ * with a maximum of 24 hours ago.   
+ * 
+ */
+float WaspSensorAgr_v20::readPluviometerSinceHour(uint8_t startHour)
+{
+        uint8_t window = 0;
+        RTC.ON();
+	RTC.getTime();
+        
+        if ((RTC.hour - startHour) < 0) window = 24; 
+        window = window + (RTC.hour - startHour) + 1;
+        return readPluviometer(window, 0)
+}
 
 /*	readPluviometer: reads the number of pluviometer pulses during the indicated 
  * 					time and turns the value into mm of rain per indicated time
@@ -1092,27 +1110,19 @@ void WaspSensorAgr_v20::storePulse()
 	uint16_t MAX_NUMBER_PULSES = 65535;
 	
 	// check if array slot must be initialized or not
-	if( (plv_array[RTC.hour].day   == RTC.date) &&
-		(plv_array[RTC.hour].month == RTC.month) )
+	if( !((plv_array[RTC.hour].day == RTC.date) &&
+            (plv_array[RTC.hour].month == RTC.month)) )
 	{
-		// increment number of pulses
-		if( plv_array[RTC.hour].pulses < MAX_NUMBER_PULSES )
-		{
-			plv_array[RTC.hour].pulses++;
-		}
-	}
-	else
-	{
-		// store new date for this slot
-		plv_array[RTC.hour].day = RTC.date;
-		plv_array[RTC.hour].month = RTC.month;
-		plv_array[RTC.hour].pulses = 0;
-		// increment number of pulses
-		if( plv_array[RTC.hour].pulses < MAX_NUMBER_PULSES )
-		{
-			plv_array[RTC.hour].pulses++;
-		}
+            // store new date for this slot
+            plv_array[RTC.hour].day = RTC.date;
+            plv_array[RTC.hour].month = RTC.month;
+            plv_array[RTC.hour].pulses = 0;
 	}	
+
+        if( plv_array[RTC.hour].pulses < MAX_NUMBER_PULSES )
+        {
+            plv_array[RTC.hour].pulses++;
+        }
 }
 
 

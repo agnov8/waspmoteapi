@@ -1052,8 +1052,7 @@ public:
     
 	//! It sends a packet from one XBee to another XBee in API mode
 	/*! This function performs application-level retries.
-	 * 	This function is only used for 64-bit addressing.
-  	/*!
+	 * 	This function is only used for 64-bit addressing
     \param char* macAddress : destination MAC address
     \param char* data : data to be sent (as string)
     \return '0' on success, '1' error
@@ -1063,7 +1062,6 @@ public:
     //! It sends a packet from one XBee to another XBee in API mode
 	/*! This function performs application-level retries.
 	 * 	This function is only used for 64-bit addressing.
-  	/*!
     \param char* macAddress : destination MAC address
     \param uint8_t* pointer : pointer to buffer of data to be sent
     \param uint16_t length  : length of the buffer

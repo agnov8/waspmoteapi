@@ -546,6 +546,13 @@ public:
 	 */
 	float readPluviometerDay();
  
+	//! It calculates the rain fall since the hour provided
+	/*!
+	\param 'startHour' the hour from which to start calculating precipitation
+	\return float value : precipitations (mm) 
+	 */
+        float readPluviometerSinceHour(uint8_t startHour)
+                
 	//! It reads the number of pluviometer pulses during the indicated 
 	//! time and turns the value into mm of rain per indicated time
 	/*!
