@@ -329,15 +329,16 @@ void onHAIwakeUP(void)
 	
 	if( intConf & PLV_INT )
 	{
-		// check monitorization pin
-		if( digitalRead(PLV_INT_PIN_MON) )
+		// Update counters based on monitorization pin, but
+                // only if there is no RTC interrupt at the same time 
+		if( digitalRead(PLV_INT_PIN_MON) && !(intFlag & RTC_INT))
 		{
 			intCounter++;
 			intFlag |= PLV_INT;
 			intArray[PLV_POS]++;					
 		}
-	}
-	
+	}        
+
 	// Enable interrupts by setting the global interrupt mask
 	sei();
 }
@@ -365,16 +366,16 @@ void onLAIwakeUP(void)
 	// used to update the interrupt flag
 	
 	if( intConf & RAD_INT )
-    {
-        if( !digitalRead(RAD_INT_PIN_MON) )
         {
-			
-            intCounter++;
-            intFlag |= RAD_INT;
-            intArray[RAD_POS]++;
-            disableInterrupts(RAD_INT);
+            if( !digitalRead(RAD_INT_PIN_MON) )
+            {
+
+                intCounter++;
+                intFlag |= RAD_INT;
+                intArray[RAD_POS]++;
+                disableInterrupts(RAD_INT);
+            }
         }
-    }
 
 	if( intConf & WTD_INT )
 	{

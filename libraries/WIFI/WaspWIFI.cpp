@@ -3117,7 +3117,7 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 	// Send header automatically when connection is open	
 	// Copy "set o f 1\r"
 	//strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[57])));
-        snprintf(question, sizeof(question),"set o f 0\r");
+        snprintf(question, sizeof(question), "set o f 0\r");
 	u5 = sendCommand(question);
 	
 	// Use UART data trigger mode, which causes the module to make a TCP/HTTP 
@@ -3152,9 +3152,9 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 			
 			if(findPattern((uint8_t*)answer, HTTP_OK, length)==-1)
 			{	
-				#ifdef DEBUG_WIFI
+				//#ifdef DEBUG_WIFI
 				USB.println(F("200 OK not found"));		
-				#endif	
+				//#endif	
 				result = 0;
 			}
 			else
@@ -3194,7 +3194,7 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 		// get the backup of the answer when OK
 		memcpy(answer, aux, sizeof(answer));
 	}
-	
+        
 	return result;  
 }
 

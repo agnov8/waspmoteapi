@@ -977,21 +977,24 @@ float WaspSensorAgr_v20::readPluviometerDay()
 
 /*	readPluviometerSince 
  * 
- * It calculates the rain fall since a start time (using the whole hour) given, 
- * with a maximum of 24 hours ago.   
+ * It calculates the rain fall since a start time given (using the whole hour) 
+ * with a maximum of 24 hours ago.  
+ * 
+ * Useful if you need to get the bom.gov.au equivalent of "rain since 9am". 
  * 
  */
-float WaspSensorAgr_v20::readPluviometerSinceHour(uint8_t startHour)
+float WaspSensorAgr_v20::readPluviometerSince(uint8_t iHour)
 {
-        uint8_t window = 0;
+        uint8_t numHours = 0;
         RTC.ON();
 	RTC.getTime();
         
-        if ((RTC.hour - startHour) < 0) window = 24; 
-        window = window + (RTC.hour - startHour) + 1;
-        return readPluviometer(window, 0)
+        // Adjust number of Hours if current hour is prior to iHour
+        if (RTC.hour < iHour) numHours = 24;
+        numHours = numHours + (RTC.hour - iHour) + 1;
+        return readPluviometer(numHours, 0);
 }
-
+ 
 /*	readPluviometer: reads the number of pluviometer pulses during the indicated 
  * 					time and turns the value into mm of rain per indicated time
  *	Parameters: 'time' indicates the amount of time (in seconds) to calculate 
