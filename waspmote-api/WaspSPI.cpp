@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2015 Libelium Comunicaciones Distribuidas S.L.
+ *  Copyright (C) 2016 Libelium Comunicaciones Distribuidas S.L.
  *  http://www.libelium.com
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  Version:		1.2
+ *  Version:		1.4
  *  Design:			David Gascón
  *  Implementation:	Alberto Bielsa, David Cuartielles
  */
@@ -65,9 +65,14 @@ void WaspSPI::close()
 	// Close SPI COM only when all modules are off
 	// if one of them is still on, then do not proceed with
 	// the closing process
-	if( (SPI.isSD == false) && (SPI.isSX == false) && (SPI.isDustSensor == false) )
+	if( (SPI.isSD == false) 
+		&& (SPI.isSX == false) 
+		&& (SPI.isDustSensor == false) 
+		&& (SPI.isSmartWater == false) 
+		&& (SPI.isSmartWaterIons == false)
+		&& (SPI.isRS485 == false) )
 	{
-		// define SPI pins as INPUTs (high impedance)	
+		// define SPI pins as INPUTs (high impedance)
 		pinMode(SD_SCK, INPUT);
 		pinMode(SD_MOSI, INPUT);
 		pinMode(SD_MISO, INPUT);
@@ -245,9 +250,16 @@ void WaspSPI::setSPISlave(uint8_t SELECTION)
 	
 	if( WaspRegister & REG_WATER_IONS )
 	{
-		// Chip Select of the Smart Water ADC 
+		// Chip Select of the Smart Water Ions ADC 
 		pinMode(DIGITAL1,OUTPUT);
 		digitalWrite(DIGITAL1,HIGH);
+	}
+	
+	if( WaspRegister & REG_RS485 )
+	{
+		// Chip Select of the RS-485 Board 
+		pinMode(SOCKET0_SS,OUTPUT);
+		digitalWrite(SOCKET0_SS,HIGH);
 	}
 	
 	switch(SELECTION)
@@ -338,6 +350,16 @@ void WaspSPI::secureBegin()
 		digitalWrite(MEM_PW, HIGH);				
 	}
 	
+	// check if Semtech module was not powered on before using the SD card
+	if( WaspRegister & REG_RS485 )
+	{
+		if( SPI.isRS485 == false )
+		{
+			pinMode(XBEE_PW,OUTPUT);
+			digitalWrite(XBEE_PW,HIGH);			
+		}
+	}	
+	
 }
 
 
@@ -376,6 +398,15 @@ void WaspSPI::secureEnd()
 	{			
 		pinMode(MEM_PW,OUTPUT);
 		digitalWrite(MEM_PW, LOW);				
+	}
+	
+	if( WaspRegister & REG_RS485 )
+	{
+		if( SPI.isRS485 == false )
+		{			
+			pinMode(XBEE_PW,OUTPUT);
+			digitalWrite(XBEE_PW,LOW);			
+		}
 	}
 	
 	

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2015 Libelium Comunicaciones Distribuidas S.L.
+ *  Copyright (C) 2016 Libelium Comunicaciones Distribuidas S.L.
  *  http://www.libelium.com
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- *  Version:		1.11
+ *  Version:		1.14
  *  Design:			David Gascón
  *  Implementation:	Alberto Bielsa, David Cuartielles, Yuri Carmona
  */
@@ -206,6 +206,7 @@ void WaspPWR::switchesOFF(uint8_t option)
 		// switch OFF sensor boards
 		PWR.setSensorPower(SENS_3V3, SENS_OFF);
 		PWR.setSensorPower(SENS_5V, SENS_OFF);
+		Wire.isBoard = false;
 	}
 	
 	// close UART0
@@ -275,6 +276,9 @@ void WaspPWR::switchesOFF(uint8_t option)
 		digitalWrite(ANA0, LOW);
 	}
 	
+	// set the interruption line down
+	pinMode(MUX_RX, INPUT);
+	digitalWrite(MUX_RX, LOW);	
 }
 
 
@@ -464,6 +468,27 @@ void WaspPWR::deepSleep(	const char* time2wake,
 	pinMode(XBEE_MON,OUTPUT);
 	digitalWrite(XBEE_MON,LOW);
 	
+	// switches off depending on the option selected  
+	switchesOFF(option);
+	
+	// mandatory delay to wait for MUX_RX stabilization 
+	// after switching off the sensor boards 
+	delay(100);	
+	
+	// make sure interruption pin is LOW before entering a low power state
+	// if not the interruption will never come
+	while(digitalRead(MUX_RX)==HIGH)
+	{	
+		// clear all detected interruption signals
+		delay(1);
+		PWR.clearInterruptionPin();
+		retries++;
+		if(retries>10)
+		{
+			return (void)0;
+		}
+	}
+	
 	// RTC ON
 	RTC.ON();
 	// set Alarm
@@ -481,30 +506,11 @@ void WaspPWR::deepSleep(	const char* time2wake,
 	||	( minute_aux != RTC.minute_alarm1 )
 	||	( second_aux != RTC.second_alarm1 ) )
 	{
+		RTC.disableAlarm1();
+		RTC.OFF();
 		return (void)0;
 	}
-    RTC.OFF();    
-    	
-	// switches off depending on the option selected  
-	switchesOFF(option);
-		
-	// mandatory delay to wait for MUX_RX stabilization 
-	// after switching off the sensor boards 
-	delay(100);	
-	
-	// make sure interruption pin is LOW before entering a low power state
-	// if not the interruption will never come
-	while(digitalRead(MUX_RX)==HIGH)
-	{
-		// clear all detected interruption signals
-		delay(1);
-		PWR.clearInterruptionPin();
-		retries++;
-		if(retries>10)
-		{
-			return (void)0;
-		}
-	}
+    RTC.OFF();	
 	
 	// set sleep mode
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -702,39 +708,6 @@ void	WaspPWR::ifHibernate()
 	// declare counter
 	uint8_t counter=0;
 	
-	// validate Hibernate interruption when both RTC interruption 
-	// signal and hibernate EEPROM flag are active
-	if( digitalRead(RTC_INT_PIN_MON) && (Utils.readEEPROM(HIB_ADDR)==HIB_VALUE) )
-	{
-		// get RTC time and last almarm setting
-		RTC.ON();
-		RTC.getAlarm1();
-		RTC.getTime();	
-		
-		// when the interruption and startup has been produced within 3 seconds
-		// then we validate the Hibernate interruption. If not, maybe the 
-		// Waspmote startup conditions may show the hibernate startup conditions 
-		// when it is not true	
-		int total_diff = RTC.second - RTC.second_alarm1;	
-				
-		// check seconds zero crossing
-		if( RTC.minute - RTC.minute_alarm1 > 0 )
-		{
-			total_diff = total_diff + (RTC.minute - RTC.minute_alarm1)*60;
-		}
-		
-		// check minute zero crossing
-		if( RTC.minute - RTC.minute_alarm1 < 0 )	
-		{
-			total_diff = total_diff + (RTC.minute-RTC.minute_alarm1+60)*60;
-		}	
-		
-		if( (total_diff < 3) && (total_diff >= 0) )	
-		{
-			intFlag |= HIB_INT;
-		}
-	}	
-	
 	// set EEPROM Hibernate flag to 0
 	eeprom_write_byte((unsigned char *) HIB_ADDR, 0);
 	
@@ -852,7 +825,11 @@ void WaspPWR::clearInterruptionPin()
 			default: 		// do nothing
 							break;				
 		}										
-	}	 
+	}
+	
+	// set the interruption line down
+	pinMode(MUX_RX, INPUT);
+	digitalWrite(MUX_RX, LOW);
 }
 
 

@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
   
-    Version:		1.8
+    Version:		1.9
     Design:			David Gascón
     Implementation:	David Cuartielles, Alberto Bielsa, Yuri Carmona
 */
@@ -39,7 +39,7 @@
 /*! \def WASPMOTE_API_VERSION
     \brief Waspmote API version number
  */
-#define WASPMOTE_API_VERSION 18
+#define WASPMOTE_API_VERSION 20
  
  
  
@@ -371,6 +371,7 @@
 #define	REG_SX				131072	// bit 17
 #define	REG_DUST_GASES_PRO	262144	// bit 18
 #define	REG_WATER_IONS		524288	// bit 19
+#define REG_RS485			1048576	// bit 20
 
 
 /*******************************************************************************
