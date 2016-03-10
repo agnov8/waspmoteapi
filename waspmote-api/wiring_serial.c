@@ -28,7 +28,7 @@
 // using a ring buffer (I think), in which rx_buffer_head is the index of the
 // location to which to write the next incoming character and rx_buffer_tail
 // is the index of the location from which to read.
-#define RX_BUFFER_SIZE_0 512
+#define RX_BUFFER_SIZE_0 512 
 #define RX_BUFFER_SIZE_1 512
 
 	unsigned char rx_buffer0[RX_BUFFER_SIZE_0];

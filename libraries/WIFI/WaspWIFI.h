@@ -111,7 +111,7 @@
 #define FTP_ACTIVE	1
 
 //! DEBUG MODE //
-//~ #define DEBUG_WIFI 		// Debug flag
+//#define DEBUG_WIFI 		// Debug flag
 #define QUIET		0   // No messages printed when wakes up or powers up.
 #define ALL			1   // All status messages.
 #define CRITICAL	2   // Only critical network AP connection level status
@@ -177,6 +177,7 @@ class WaspWIFI
     char CLOS_pattern[7];
     char Disconn_pattern[8];
     char timeout_pattern[9];
+    char startbody_pattern[5];
 
     
     // INTERNAL FUNCTIONS /////////////////////////////////////////////////////
@@ -270,8 +271,8 @@ class WaspWIFI
   public:
     
     //! Specifies the answer that is read from the WIFI module
-    char answer[513]; 
-        
+    char answer[513];  
+
     //! Specifies the length of the answer received
     int length;
     
@@ -715,6 +716,35 @@ class WaspWIFI
       \return '1' on success, '0' otherwise.
     */
     uint8_t getFile(char* filename, char* local_folder, char* remote_folder);
+    
+    // GET resource (ie. file) using HTTP and writes it to SD
+    //
+    //  param char* filename : the name of the file to get
+    //  param char* local_folder : the folder of the SD card to save the file.
+    //  param uint8_t option : using either IP/DNS to resolve server address
+    //  param char* host : IP addy or DNS name of file server
+    //  param char* resource_path : Url path to resource on server
+    //  return '1' on success, '0' otherwise.
+    //    
+    uint8_t httpGetResource(char* filename, char* local_folder, uint8_t option, char* host, char* resource_path);
+    
+    // GET request only, using HTTP
+    //
+    //  param uint8_t option : using either IP/DNS to resolve server address
+    //  param char* host : IP addy or DNS name of file server
+    //  param char* query_path : query path on server
+    //  return '1' on success, '0' otherwise.
+    // 
+    uint8_t httpRequest(uint8_t option, char* host, char* query_type, char* query_path);
+
+    // Request S/W upgrade (OTAP) using HTTP.
+    //
+    //  param uint8_t option : using either IP/DNS to resolve server address
+    //  param char* host : IP/Url of fiel server
+    //  param char* url_path : Url path on server
+    //  return '1' on success, '0' otherwise.
+    //    
+    int8_t httpRequestOtap(uint8_t option, char* host, char* url_path);
     
     //! Uploads a file via FTP.
     /*!

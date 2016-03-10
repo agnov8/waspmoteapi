@@ -1156,6 +1156,12 @@ WaspWIFI::WaspWIFI()
 	timeout_pattern[6]=(char)0x74;
 	timeout_pattern[7]=(char)0x3d;
 	timeout_pattern[8]=(char)0x00;	
+        
+        startbody_pattern[0]=(char)0x0d;
+        startbody_pattern[1]=(char)0x0a;
+        startbody_pattern[2]=(char)0x0d;
+        startbody_pattern[3]=(char)0x0a;
+        startbody_pattern[4]=(char)0x00;    
 }
 
 // Basic Methods //////////////////////////////////////////////////////////////
@@ -2436,6 +2442,538 @@ uint8_t WaspWIFI::getFile(	char* filename,
 	return 0;
 }
 
+//
+// Similar to getFile, albeit that it uses HTTP instead of FTP to get the resource
+//
+uint8_t WaspWIFI::httpGetResource(char* filename, char* local_folder, uint8_t option, char* host, char* url_path)
+{
+    bool okHeadersFound;
+    int writeBytes, writeBufferSize, startOffset, patternOffset, finalCnt;
+    uint32_t readBytes;
+    uint8_t u1,u2,u3,u4,u5,u6,u7,u8;
+    char question[256];
+    char buffer[32];
+    SdFile file;
+    unsigned long t1;
+
+    // switch SD card ON and jump to root folder
+    SD.ON();
+    SD.goRoot();
+
+    // check if the card is there or not
+    if( !SD.isSD() )
+    {	
+        #ifdef DEBUG_WIFI
+        USB.println(F("Error: SD not present"));  
+        #endif 
+        SD.OFF();
+        return 0;
+    }
+
+    // Create folder in the case it does not exist
+    if( (strcmp(local_folder,".")==0) || (strcmp(local_folder,"/")==0) )
+    {
+        // root directory selected 
+        // do nothing
+    }
+    else if( SD.isDir(local_folder) == 1 )
+    {
+        // Selects SD card local folder		
+        if( !SD.cd(local_folder) )
+        {	
+                #ifdef DEBUG_WIFI
+                USB.println(F("Error: SD cd"));  
+                #endif 
+                SD.OFF();
+                return 0;
+        }
+    }
+    else if( SD.isDir(local_folder) == -1 )
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("create folder")); 
+        #endif
+        if( SD.mkdir(local_folder) == false )
+        {
+            // not created
+            #ifdef DEBUG_WIFI
+            USB.println(F("Error: directory not created"));  
+            #endif  
+            SD.OFF();
+            return 0;
+        }	
+
+        // Selects SD card local folder		
+        if( !SD.cd(local_folder) )
+        {	
+            #ifdef DEBUG_WIFI
+            USB.println(F("Error: SD cd"));  
+            #endif 
+            SD.OFF();
+            return 0;
+        }
+    }
+
+    // Delete file in the case it exists
+    if( SD.isFile(filename) == 1 )
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("delete file")); 
+        #endif
+        SD.del(filename);
+    }
+
+    // Creates a file in that folder.
+    SD.create(filename);
+
+    // search file in current directory and open it in write mode
+    if(!SD.openFile(filename, &file, O_READ | O_WRITE | O_SYNC))    
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("Error: opening file")); 
+        #endif
+        SD.OFF();
+        return 0;
+    }
+
+    // jump over zero 'offset'
+    if(!file.seekSet(0))
+    {	
+        #ifdef DEBUG_WIFI
+        USB.println(F("Error: setting file offset"));  
+        #endif
+        file.close();
+        SD.OFF();		
+        return 0;
+    }	
+
+    //
+    // Reduce UART baudrate so we get time to write to the SD card,
+    // whilst reading from the TCPIP stream
+    // 
+    baud_rate=57600;
+    snprintf(buffer, sizeof(buffer), "set u i %li\r", baud_rate);
+    printString(buffer,_uartWIFI);
+    closeSerial(_uartWIFI);
+    delay(100);
+    beginSerial(baud_rate,_uartWIFI);
+    delay(100);
+    serialFlush(_uartWIFI);
+
+    // If the address is given by a IP address.
+    if ( option == IP )
+    {						
+        // Copy "set i h "
+        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[32])));
+        snprintf(question, sizeof(question),"%s%s\r", buffer, host);
+        u1 = sendCommand(question);
+        u2 = 1;
+    }
+    // If the address is given by a URL address.
+    else if( option == DNS )
+    {		
+        // Turn on DNS. set ip host 0. 			
+        // Copy "set i h 0\r"
+        strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[54])));
+        u1 = sendCommand(question);	
+
+        // Set the web server name			
+        // Copy "set d n "
+        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[41])));		
+        snprintf(question, sizeof(question),"%s%s\r", buffer, host);
+        u2 = sendCommand(question);
+    }
+    else
+    {
+        SD.OFF();
+        return 0;
+    }
+
+    // Set the web server port introduced as input
+    // Copy "set i r "
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[33])));
+    snprintf(question, sizeof(question),"%s%u\r", buffer, 80 );		
+    u3 = sendCommand(question);
+
+    // set com remote
+    // Copy "set c r "
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[56])));
+    snprintf(question, sizeof(question),"%s%u\r", buffer, 0);
+    u4 = sendCommand(question);
+
+    // Send option format to default	
+    snprintf(question, sizeof(question), "set o f 0\r");
+    u5 = sendCommand(question);
+
+    // 
+    // Ensure we do _NOT_ receive the *CLOS* string on the UART
+    // when TCP connection is closed. This will interfere with data
+    // being received on UART.
+    // 
+    snprintf(question, sizeof(question), "set c c 0\r");
+    u5 = sendCommand(question);
+
+    // Use UART in data mode, ie. when it receives data it sends.
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[97])));
+    snprintf(question, sizeof(question), buffer, 0x02);
+    u6 = sendCommand(question);
+
+    // Set UART flush size
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[92])));
+    snprintf(question, sizeof(question), "%s%u\r", buffer, 1460);
+    u7 = sendCommand(question);
+
+    // Set UART flush timer
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[93])));
+    snprintf(question, sizeof(question), "%s%u\r", buffer, 1000);
+    u8 = sendCommand(question);
+    
+    // If everything is Ok, even it is correctly connected.
+    if ( (u1==1)&&(u2==1)&&(u3==1)&&(u4==1)&&(u5==1)&&(u6==1)&&(u7==1)&&(u8==1) )
+    { 		
+        // introduce a 500ms delay to wait for configuration before 
+        // opening the HTTP connection
+        delay(500);
+
+        //
+        // Build HTTP GET query
+        //
+        snprintf(question, sizeof(question),"GET %s%s HTTP/1.1\r\nHost: %s\r\nConnection: close", url_path, filename, host);
+        
+        // LH
+        //
+        // Open HTTP connection. With the default UART mode, 
+        //
+        readBytes = 0;
+        writeBufferSize = (int)(sizeof(answer))-1; // Account for '\0' char
+        okHeadersFound = false;
+            
+        if(openHTTP())  
+        {   
+            // Once the connection is open, we send the string with 
+            // the body of the HTTP GET request
+            printString(question, _uartWIFI);
+
+            t1=millis();
+            while(!serialAvailable(_uartWIFI))
+            {
+                if (millis()-t1>10000) break;
+            } 
+
+            while( serialAvailable(_uartWIFI) )
+            {
+                memset(answer, 0x00, sizeof(answer));
+                startOffset = 0;
+                patternOffset = 0;
+                writeBytes = 0;
+
+                // 
+                // Buffered read, read until,
+                // 1) end of UART buffer stream, or;
+                // 2) max buffer size 
+                // has been reached
+                //
+                while ( (writeBytes < writeBufferSize) && serialAvailable(_uartWIFI) ) 
+                {
+                    answer[writeBytes++]=serialRead(_uartWIFI);
+                    readBytes++;
+                    latencyDelay();
+                }
+                answer[writeBytes] = '\0';
+
+                if ( (readBytes > 0) ) 
+                {
+                    if( !okHeadersFound ) 
+                    {
+                        // 
+                        // Don't write the HTTP headers to file, so remove them
+                        // 
+                        // First see if we can find a '200 OK' in the header
+                        //
+                        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[98])));
+                        patternOffset = findPattern((uint8_t*)answer, buffer, writeBytes);
+                        if( patternOffset > -1 )
+                        {
+                            // Now, lets look for the last double CRLF which indicates 
+                            // start of body (if any)
+                            patternOffset = findPattern((uint8_t*)answer, startbody_pattern, writeBytes);
+                            if( patternOffset > -1 )
+                            {
+                                startOffset = patternOffset + strlen(startbody_pattern);
+                                okHeadersFound = true;
+                            }
+                        } 
+                        if( patternOffset == -1 )
+                        {
+                            startOffset = 0;
+                        }
+                    }
+
+                    //
+                    // Write buffer
+                    //
+                    finalCnt = writeBytes-startOffset;
+                    if( file.write((uint8_t*)(answer+startOffset), finalCnt) != finalCnt )
+                    {
+                        #ifdef DEBUG_WIFI
+                        USB.println(F("+++SD WRITING ERR")); 
+                        #endif
+                        file.close();
+                        SD.OFF();
+                        return 0;    
+                    }
+                }
+            } // UART all read by now
+            if ( okHeadersFound )
+            {
+                //
+                // Force command mode to ensure further comms with RN171
+                // is possible
+                //
+                serialFlush(_uartWIFI);
+                delay(250);
+                printString("$$$",_uartWIFI);
+                delay(250);
+                
+                file.close(); 
+                SD.OFF();		
+                #ifdef DEBUG_WIFI
+                USB.print(F("+++Read: "));
+                USB.println(readBytes);			 
+                USB.println(F("+++DOWNLOAD DONE"));
+                #endif
+                return 1;
+            }
+            else
+            {
+                file.close(); 
+                SD.OFF();		
+                #ifdef DEBUG_WIFI
+                USB.println(F("+++FILE DOWNLOAD ERROR"));
+                #endif
+                return 0;
+            }
+        }
+        else
+        {
+            #ifdef DEBUG_WIFI
+            USB.println(F("+++CANT OPEN HTTP")); 
+            #endif
+            file.close(); 
+            SD.OFF();
+            return 0;
+        }
+    }
+    else
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("+++CONFIG ERR")); 
+        #endif
+        file.close(); 
+        SD.OFF();
+        return 0;
+    }
+}
+
+
+//
+// HTTP request (query_type can be 'POST' or 'GET'))
+//
+uint8_t WaspWIFI::httpRequest(uint8_t option, char* host, char* query_type, char* query_url)
+{
+    bool okHeadersFound;
+    int writeBytes, writeBufferSize, patternOffset;
+    uint32_t readBytes;
+    uint8_t u1,u2,u3,u4,u5,u6,u7,u8;
+    char question[512];
+    char buffer[32];
+    unsigned long t1;
+
+    // If the address is given by a IP address.
+    if ( option == IP )
+    {						
+        // Copy "set i h "
+        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[32])));
+        snprintf(question, sizeof(question),"%s%s\r", buffer, host);
+        u1 = sendCommand(question);
+        u2 = 1;
+    }
+    // If the address is given by a URL address.
+    else if( option == DNS )
+    {		
+        // Turn on DNS. set ip host 0. 			
+        // Copy "set i h 0\r"
+        strcpy_P(question, (char*)pgm_read_word(&(table_WIFI[54])));
+        u1 = sendCommand(question);	
+
+        // Set the web server name			
+        // Copy "set d n "
+        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[41])));		
+        snprintf(question, sizeof(question),"%s%s\r", buffer, host);
+        u2 = sendCommand(question);
+    }
+    else
+    {
+        return 0;
+    }
+
+    // Set the web server port introduced as input
+    // Copy "set i r "
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[33])));
+    snprintf(question, sizeof(question),"%s%u\r", buffer, 80 );		
+    u3 = sendCommand(question);
+
+    // set com remote
+    // Copy "set c r "
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[56])));
+    snprintf(question, sizeof(question),"%s%u\r", buffer, 0);
+    u4 = sendCommand(question);
+
+    // Send option format to default	
+    snprintf(question, sizeof(question), "set o f 0\r");
+    u5 = sendCommand(question);
+
+    // 
+    // Ensure we do _NOT_ receive the *CLOS* string on the UART
+    // when TCP connection is closed. This will interfere with data
+    // being received on UART.
+    // 
+    snprintf(question, sizeof(question), "set c c 0\r");
+    u5 = sendCommand(question);
+
+    // Use UART in data mode, ie. when it receives data it sends.
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[97])));
+    snprintf(question, sizeof(question), buffer, 0x02);
+    u6 = sendCommand(question);
+
+    // Set UART flush size
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[92])));
+    snprintf(question, sizeof(question), "%s%u\r", buffer, 1460);
+    u7 = sendCommand(question);
+
+    // Set UART flush timer
+    strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[93])));
+    snprintf(question, sizeof(question), "%s%u\r", buffer, 1000);
+    u8 = sendCommand(question);
+    
+    // If everything is Ok, even it is correctly connected.
+    if ( (u1==1)&&(u2==1)&&(u3==1)&&(u4==1)&&(u5==1)&&(u6==1)&&(u7==1)&&(u8==1) )
+    { 		
+        // introduce a 500ms delay to wait for configuration before 
+        // opening the HTTP connection
+        delay(500);
+
+        //
+        // LH: Build HTTP query
+        //
+        snprintf(question, sizeof(question),"%s %s HTTP/1.1\r\nHost: %s\r\nConnection: close", query_type, query_url, host);
+        
+        //
+        // Open HTTP connection. With the default UART mode, 
+        //
+        readBytes = 0;
+        writeBufferSize = (int)(sizeof(answer))-1; // Account for '\0' char
+        okHeadersFound = false;
+
+        if(openHTTP())  
+        {   
+            // Once the connection is open, we send the string with 
+            // the body of the HTTP GET request
+            printString(question, _uartWIFI);
+
+            // Wait until UART response
+            t1=millis();
+            while(!serialAvailable(_uartWIFI))
+            {
+                if (millis()-t1>10000) break;
+            } 
+
+            while( serialAvailable(_uartWIFI) )
+            {
+                memset(answer, 0x00, sizeof(answer));
+                patternOffset = 0;
+                writeBytes = 0;
+
+                // 
+                // Buffered read, read until,
+                // 1) end of UART buffer stream, or;
+                // 2) max buffer size 
+                // has been reached
+                //
+                while ( (writeBytes < writeBufferSize) && serialAvailable(_uartWIFI) ) 
+                {
+                    answer[writeBytes++]=serialRead(_uartWIFI);
+                    readBytes++;
+                    latencyDelay();
+                }
+                answer[writeBytes] = '\0';
+
+                if ( (readBytes > 0) ) 
+                {
+                    if( !okHeadersFound ) 
+                    {
+                        // 
+                        // Don't write the HTTP headers to file, so remove them
+                        // 
+                        // First see if we can find a '200 OK' in the header
+                        //
+                        strcpy_P(buffer, (char*)pgm_read_word(&(table_WIFI[98])));
+                        patternOffset = findPattern((uint8_t*)answer, buffer, writeBytes);
+                        if( patternOffset > -1 )
+                        {
+                            // Now, lets look for the double CRLF which indicates 
+                            // start of body (if any)
+                            patternOffset = findPattern((uint8_t*)answer, startbody_pattern, writeBytes);
+                            if( patternOffset > -1 )
+                            {
+                                okHeadersFound = true;
+                            }
+                        } 
+                    }
+                }
+            } // Performed full read of UART
+            if ( okHeadersFound )
+            {
+                //
+                // Force command mode to ensure further comms with RN171
+                // is possible
+                //
+                serialFlush(_uartWIFI);
+                delay(250);
+                printString("$$$",_uartWIFI);
+                delay(250);
+                
+                #ifdef DEBUG_WIFI
+                USB.print(F("+++Read: "));
+                USB.println(readBytes);			 
+                USB.println(F("+++GET OK"));
+                #endif
+                return 1;
+            }
+            else
+            {
+                #ifdef DEBUG_WIFI
+                USB.println(F("+++FILE GET ERROR"));
+                #endif
+                return 0;
+            }
+        }
+        else
+        {
+            #ifdef DEBUG_WIFI
+            USB.println(F("+++CANT OPEN HTTP")); 
+            #endif
+            return 0;
+        }
+    }
+    else
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("+++CONFIG ERR")); 
+        #endif
+        return 0;
+    }
+}
 
 
 //! Uploads a file via FTP.
@@ -2995,7 +3533,7 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 			
 			// backup copy of the answer			
 			memcpy(aux, answer, sizeof(answer));	
-			
+
 			// Copy "200 OK"
 			strcpy_P(HTTP_OK, (char*)pgm_read_word(&(table_WIFI[98])));
 			
@@ -3183,6 +3721,10 @@ uint8_t WaspWIFI::getURL(	uint8_t opt,
 			
 			// backup copy of the answer			
 			memcpy(aux, answer, sizeof(answer));			
+                        #ifdef DEBUG_WIFI
+                        USB.println(answer);		
+                        #endif	
+			
 			
 			// Copy "200 OK"
 			strcpy_P(HTTP_OK, (char*)pgm_read_word(&(table_WIFI[98])));			
@@ -3747,14 +4289,14 @@ int WaspWIFI::read(uint8_t blo, unsigned long time)
 			length++; 
 		}
 		latencyDelay();
-    }
-    answer[length]='\0'; 
-  
-	// Prints the answer.
-	#ifdef DEBUG_WIFI
-    USB.print(F("R: "));
-    USB.println(answer); 
-    #endif
+        }
+        answer[length]='\0'; 
+
+            // Prints the answer.
+            #ifdef DEBUG_WIFI
+        USB.print(F("R: "));
+        USB.println(answer); 
+        #endif
     
 	// Returns the number of characters of the answer.
 	return length;
@@ -5481,6 +6023,274 @@ int8_t WaspWIFI::requestOTA()
 	return 0;
 }
 
+
+/* httpRequestOtap() - It downloads firmware file via HTTP (OTAP)
+ *
+ * This function downloads a new firmware file (if OTAP is necessary)
+ *
+ * Returns  
+ * 	'0' if error 
+ * 	'-1' if error downloading UPGRADE.TXT
+ * 	'-2' if filename in UPGRADE.TXT is not a 7-byte name
+ * 	'-3' if no FILE label is found in UPGRADE.TXT
+ * 	'-4' if NO_FILE is defined as FILE in UPGRADE.TXT
+ * 	'-5' if no PATH label is found in UPGRADE.TXT
+ * 	'-6' if no SIZE label is found in UPGRADE.TXT
+ * 	'-7' if no VERSION label is found in UPGRADE.TXT
+ * 	'-8' if version indicated in UPGRADE.TXT is lower/equal to Waspmote's version
+ * 	'-9' if file size does not match the indicated in UPGRADE.TXT
+ * 	'-10' if error downloading binary file
+*/
+int8_t WaspWIFI::httpRequestOtap(uint8_t option, char* host, char* resource_path)
+{
+    int8_t ans;
+    char* str_pointer;
+    char aux_name[8];
+    char path[60];
+    char aux_str[10];
+    long int aux_size;
+    uint8_t aux_version;
+    int len;
+    char slash[] = "/";
+
+    // set to zero the buffer 'path'
+    memset(path, 0x00, sizeof(path));
+    memset(answer, 0x00, sizeof(answer));
+
+    // set SD ON and delete actual OTA_ver_file
+    SD.ON();
+    SD.goRoot();
+    SD.del(OTA_ver_file);
+    SD.OFF();
+
+    #ifdef DEBUG_WIFI
+    USB.println(F("Retrieving OTA VER file (HTTP)"));
+    #endif
+
+    // get OTA_ver_file
+    ans = httpGetResource( (char*)OTA_ver_file, slash, option, host, resource_path);
+    if( ans == 1)
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("OTA_ver_file downloaded OK")); 
+        #endif
+    } 
+    else
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("ERROR downloading OTA_ver_file"));
+        #endif
+        return -1;
+    }
+	
+    // 
+    // analyze OTA_ver_file 
+    //
+    SD.ON();
+    SD.goRoot();
+	
+    // Reads the file and copy to 'answer' buffer
+    strcpy(answer, SD.cat(OTA_ver_file, 0, sizeof(answer)));
+
+    /// 1. Search the file name
+    str_pointer = strstr(answer, "FILE:");
+    if (str_pointer != NULL)
+    {	
+        // Copy the FILE contents:
+        // get string length and check it is equal to 7
+        len = strchr(str_pointer, '\n')-1-strchr(str_pointer, ':');
+        if( len != 7 )
+        {
+            #ifdef DEBUG_WIFI
+            USB.print(F("len:"));
+            USB.println(len);
+            #endif			
+            return -2;
+        }
+        // copy string
+        strncpy(aux_name, strchr(str_pointer, ':')+1, 7);
+        aux_name[7] = '\0';
+
+        #ifdef DEBUG_WIFI
+        USB.print(F("FILE:"));
+        USB.println(aux_name);	
+        #endif
+    }
+    else
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("No FILE label"));
+        #endif
+        SD.OFF();
+        return -3;
+    }	
+	
+    /// 2. Check if NO_FILE is the filename
+    if(strcmp(aux_name,NO_OTA) == 0)
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(NO_OTA);	
+        #endif
+        return -4;
+    }
+	
+    /// 3. Search the path 
+    str_pointer = strstr(answer, "PATH:");
+    if (str_pointer != NULL)
+    {
+        // copy the PATH contents
+        len = strchr(str_pointer, '\n')-1-strchr(str_pointer, ':');
+        strncpy(path, strchr(str_pointer, ':') + 1, len );
+        path[len] = '\0';
+
+        #ifdef DEBUG_WIFI
+        USB.print(F("PATH:"));
+        USB.println(path);
+        #endif		
+
+        // delete actual program	
+        SD.del(aux_name);	
+    }
+    else
+    {	
+        #ifdef DEBUG_WIFI
+        USB.println(F("No PATH label"));
+        #endif
+        SD.OFF();
+        return -5;
+    }
+	
+    /// 4. Search file size 
+    str_pointer = strstr(answer, "SIZE:");
+    if (str_pointer != NULL)
+    {
+        // copy the SIZE contents
+        len=strchr(str_pointer, '\n')-1-strchr(str_pointer, ':');
+        // check length does not overflow
+        if( len >= (int)sizeof(aux_str) )
+        {
+                len = sizeof(aux_str)-1;
+        }
+        strncpy(aux_str, strchr(str_pointer, ':')+1, len);
+        aux_str[len] = '\0';
+
+        // converto from string to int
+        aux_size = atol(aux_str);
+
+        #ifdef DEBUG_WIFI
+        USB.print(F("SIZE:"));
+        USB.println(aux_size);
+        #endif			
+    }
+    else
+    {	
+        #ifdef DEBUG_WIFI
+        USB.println(F("No SIZE label"));
+        #endif
+        SD.OFF();
+        return -6;
+    }
+	
+    /// 5. Search Version
+    str_pointer = strstr(answer, "VERSION:");
+    if (str_pointer != NULL)
+    {
+        // copy the SIZE contents
+        len = strchr(str_pointer, '\n')-1-strchr(str_pointer, ':');
+        // check length does not overflow
+        if( len >= (int)sizeof(aux_str))
+        {
+                len = sizeof(aux_str)-1;
+        }
+        strncpy(aux_str, strchr(str_pointer, ':')+1, len);
+        aux_str[len] = '\0';	
+
+        // convert from string to uint8_t
+        aux_version=(uint8_t)atoi(aux_str);
+
+        #ifdef DEBUG_WIFI
+        USB.print(F("VERSION:"));
+        USB.println(aux_version,DEC);
+        #endif			
+    }
+    else
+    {	
+        #ifdef DEBUG_WIFI
+        USB.println(F("No VERSION label"));
+        #endif
+        SD.OFF();
+        return -7;
+    }	
+	
+    // get actual program version
+    uint8_t prog_version = Utils.getProgramVersion();
+
+    // get actual program name (PID)
+    char prog_name[8];
+    Utils.getProgramID(prog_name);
+	
+    // check if version number 
+    #ifdef CHECK_VERSION
+    if( strcmp(prog_name,aux_name)==0 )
+    {
+        if( prog_version >= aux_version )
+        {
+            // if we have specified the same program id and lower/same version 
+            // number, then do not proceed with OTA
+            #ifdef DEBUG_WIFI
+            USB.print(F("Invalid version\nactual:"));
+            USB.println(prog_version,DEC);
+            USB.print(F("new:"));
+            USB.println(aux_version,DEC);
+            #endif
+            return -8;
+        }
+    }	
+    #endif
+	
+    ///6. get binary file and perform OTA
+    #ifdef DEBUG_WIFI
+    USB.println(F("Downloading Firmware"));
+    #endif	
+
+    // get binary file
+    ans = httpGetResource( (char*)aux_name, slash, option, host, resource_path);
+    if (ans == 1)
+    {
+        // check if size matches
+        SD.ON();
+        // get file size
+        int32_t sd_file_size = SD.getFileSize(aux_name);
+        if( sd_file_size != aux_size )
+        {
+            #ifdef DEBUG_WIFI
+            USB.println(F("Size does not match"));
+            USB.print(F("sd_file_size:"));
+            USB.println(sd_file_size);
+            USB.print(F("UPGRADE.TXT size field:"));
+            USB.println(aux_size);			
+            #endif	
+            SD.OFF();
+            return -9;			
+        }
+        #ifdef DEBUG_WIFI
+        SD.ls();
+        #endif
+        Utils.loadOTA( aux_name, aux_version);
+        return 1;
+    }
+    else
+    {
+        #ifdef DEBUG_WIFI
+        USB.println(F("Error getting Firmware"));
+        #endif	
+        SD.OFF();
+        return -10;
+    }
+    return 0;
+}
+
+
 //! Set RTC date taken from WiFi module
 uint8_t WaspWIFI::setRTCfromWiFi()
 {
@@ -5582,6 +6392,7 @@ uint8_t WaspWIFI::setRTCfromWiFi()
 	}
 	return 1;
 }
+
 
 // Preinstantiate Objects /////////////////////////////////////////////////////
 

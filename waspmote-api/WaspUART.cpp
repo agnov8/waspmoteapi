@@ -368,7 +368,7 @@ void  WaspUART::sendCommand( uint8_t* command, uint16_t length )
 	}
 	
 	/// print command
-	for (int i = 0; i < length; i++)
+	for (uint16_t i = 0; i < length; i++)
 	{
 		printByte( command[i], _uart ); 
 	}	
@@ -587,7 +587,7 @@ uint16_t  WaspUART::readBuffer(uint16_t requestBytes, bool clearBuffer)
 	}
 	
 	// get actual instant
-	unsigned long previous = millis();
+	//unsigned long previous = millis();
 	
 	// check available data for 'timeout' milliseconds
 	while( serialAvailable(_uart) )
