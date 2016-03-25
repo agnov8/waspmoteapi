@@ -6894,6 +6894,8 @@ int8_t WaspXBeeCore::receivePacketTimeout( uint32_t timeout)
 {
 	unsigned long previous;
 	uint16_t i=0;
+	//uint16_t start 	= 0;
+	//uint16_t end 	= 0;
 	uint16_t length = 0;
 	bool restart = false;
 	bool doneStep1 = false;
@@ -7239,7 +7241,9 @@ int8_t WaspXBeeCore::receivePacketTimeout( uint32_t timeout)
  */
 uint8_t WaspXBeeCore::setRTCfromMeshlium(char* address)
 {
-        bool status = false;
+	//uint16_t length = 0;
+	bool status = false;
+	//uint8_t error = 0;
 	int result;
 	char buffer[100];
 	uint16_t year, yearH;

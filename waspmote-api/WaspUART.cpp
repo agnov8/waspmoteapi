@@ -586,6 +586,9 @@ uint16_t  WaspUART::readBuffer(uint16_t requestBytes, bool clearBuffer)
 		_length = 0;
 	}
 	
+	// get actual instant
+	//unsigned long previous = millis();
+        
 	// check available data for 'timeout' milliseconds
 	while( serialAvailable(_uart) )
 	{
