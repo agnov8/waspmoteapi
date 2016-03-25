@@ -4556,7 +4556,6 @@ int8_t WaspGPRS_Pro_core::downloadFile(	const char* file,
 	
 	unsigned long previous=0;
 	int8_t answer=0;
-	uint8_t i=0;
 	uint8_t count=10;
 	long ftp_size=0;
 	uint8_t ftp_retries;

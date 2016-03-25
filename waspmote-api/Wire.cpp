@@ -669,7 +669,7 @@ int8_t TwoWire::readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t *data, uint8
     #endif
 
     int8_t count = 0;
-    uint32_t t1;
+    uint32_t t1 = 0;
 
     // Inits I2C bus
 	if( !Wire.I2C_ON ) Wire.begin();
@@ -679,7 +679,7 @@ int8_t TwoWire::readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t *data, uint8
         Wire.beginTransmission(devAddr);
         Wire.send(regAddr + k);
         Wire.endTransmission();
-		t1 = millis();
+        t1 = millis();
         Wire.requestFrom(devAddr, (uint8_t)min(length - k, BUFFER_LENGTH));
         
 		
